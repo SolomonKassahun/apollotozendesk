@@ -11,34 +11,33 @@ def process_file(file):
 
             chunk["Corporate Phone"] = chunk["Corporate Phone"].apply(clean_phone)
 
-            # Only keep rows that have First Name, Company, and Corporate Phone
-            chunk = chunk[
+            valid_rows = chunk[
                 chunk["First Name"].notna() & chunk["First Name"].astype(str).str.strip().ne("") &
                 chunk["Company"].notna() & chunk["Company"].astype(str).str.strip().ne("") &
                 chunk["Corporate Phone"].astype(str).str.strip().ne("")
             ]
 
-            if chunk.empty:
-                continue 
+            if valid_rows.empty:
+                continue  
 
             user_chunk = pd.DataFrame({
-                "name": chunk["First Name"].astype(str).str.strip() + " " + chunk["Last Name"].fillna("").astype(str).str.strip(),
-                "email": chunk["Email"],
-                "external_id": range(1234567, 1234567 + len(chunk)),
-                "details": chunk["Keywords"],
-                "notes": chunk["Industry"],
-                "phone": chunk["Corporate Phone"],
-                "role": chunk["Title"],
+                "name": valid_rows["First Name"].astype(str).str.strip() + " " + valid_rows["Last Name"].fillna("").astype(str).str.strip(),
+                "email": valid_rows["Email"],
+                "external_id": range(1234567, 1234567 + len(valid_rows)),
+                "details": valid_rows["Keywords"],
+                "notes": valid_rows["Industry"],
+                "phone": valid_rows["Corporate Phone"],
+                "role": valid_rows["Title"],
                 "restriction": "",
-                "organization": chunk["Company"],
+                "organization": valid_rows["Company"],
                 "tags": "",
                 "brand": "",
                 "custom_fields.<fieldkey>": ""
             })
             user_data.append(user_chunk)
 
-            for company in chunk["Company"].unique():
-                org_chunk = chunk[chunk["Company"] == company]
+            for company in valid_rows["Company"].unique():
+                org_chunk = valid_rows[valid_rows["Company"] == company]
                 if company not in organization_data and not org_chunk.empty:
                     organization_data[company] = {
                         "name": company,
@@ -54,7 +53,7 @@ def process_file(file):
                     }
 
         if not user_data:
-            return None, None, "No valid rows found. All rows were missing First Name, Company, or Corporate Phone."
+            return None, None, "No valid rows found. All rows were missing First Name, Company, or Phone."
 
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
