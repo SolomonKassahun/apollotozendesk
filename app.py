@@ -1,19 +1,20 @@
-# app.py
-
 import pandas as pd
 import streamlit as st
 import re
 import io
 
-st.title("Apollo to Zendesk data Processor")
+st.title("Apollo to Zendesk Data Processor")
 
 # Expected columns
-REQUIRED_COLUMNS = ["First Name", "Last Name", "Email", "Keywords", "Industry", "Corporate Phone", "Title", "Company"]
+REQUIRED_COLUMNS = [
+    "First Name", "Last Name", "Email", "Keywords",
+    "Industry", "Corporate Phone", "Title", "Company"
+]
 
 def clean_phone(phone):
     if pd.isna(phone):
         return ""
-    return str(phone).replace("'", "")
+    return str(phone).replace("'", "").strip()
 
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -26,18 +27,23 @@ def process_file(file):
         organization_data = {}
 
         for chunk in df:
-            # Column validation for each chunk
             missing_columns = validate_columns(chunk)
             if missing_columns:
                 return None, None, f"Missing columns: {', '.join(missing_columns)}"
 
+            chunk["Corporate Phone"] = chunk["Corporate Phone"].apply(clean_phone)
+            chunk = chunk[chunk["Corporate Phone"] != ""]
+
+            if chunk.empty:
+                continue  
+
             user_chunk = pd.DataFrame({
                 "name": chunk["First Name"] + " " + chunk["Last Name"],
                 "email": chunk["Email"],
-                "external_id": range(1234567, 1234567 + len(chunk)),  
+                "external_id": range(1234567, 1234567 + len(chunk)),
                 "details": chunk["Keywords"],
                 "notes": chunk["Industry"],
-                "phone": chunk["Corporate Phone"].apply(clean_phone),  
+                "phone": chunk["Corporate Phone"],
                 "role": chunk["Title"],
                 "restriction": "",
                 "organization": chunk["Company"],
@@ -48,8 +54,8 @@ def process_file(file):
             user_data.append(user_chunk)
 
             for company in chunk["Company"].unique():
-                if company not in organization_data:
-                    org_chunk = chunk.loc[chunk["Company"] == company]
+                org_chunk = chunk[chunk["Company"] == company]
+                if company not in organization_data and not org_chunk.empty:
                     organization_data[company] = {
                         "name": company,
                         "external_id": len(organization_data) + 1234456,
@@ -63,6 +69,9 @@ def process_file(file):
                         "custom_fields.<fieldkey>": ""
                     }
 
+        if not user_data:
+            return None, None, "No valid rows found with phone numbers."
+
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
 
@@ -70,7 +79,6 @@ def process_file(file):
 
     except Exception as e:
         return None, None, f"Error while processing file: {str(e)}"
-
 
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
@@ -84,10 +92,8 @@ if uploaded_file:
     else:
         st.success("Files processed successfully!")
 
-        # Download buttons
         user_csv = user_df.to_csv(index=False).encode('utf-8')
         org_csv = org_df.to_csv(index=False).encode('utf-8')
 
         st.download_button("Download User CSV", user_csv, "user.csv", "text/csv")
         st.download_button("Download Organization CSV", org_csv, "organization.csv", "text/csv")
-
