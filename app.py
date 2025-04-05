@@ -1,25 +1,3 @@
-import pandas as pd
-import streamlit as st
-import re
-import io
-
-st.title("Apollo to Zendesk Data Processor")
-
-# Expected columns
-REQUIRED_COLUMNS = [
-    "First Name", "Last Name", "Email", "Keywords",
-    "Industry", "Corporate Phone", "Title", "Company"
-]
-
-def clean_phone(phone):
-    if pd.isna(phone):
-        return ""
-    return str(phone).replace("'", "").strip()
-
-def validate_columns(df):
-    missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
-    return missing
-
 def process_file(file):
     try:
         df = pd.read_csv(file, chunksize=10000)
@@ -32,13 +10,19 @@ def process_file(file):
                 return None, None, f"Missing columns: {', '.join(missing_columns)}"
 
             chunk["Corporate Phone"] = chunk["Corporate Phone"].apply(clean_phone)
-            chunk = chunk[chunk["Corporate Phone"] != ""]
+
+            # Only keep rows that have First Name, Company, and Corporate Phone
+            chunk = chunk[
+                chunk["First Name"].notna() & chunk["First Name"].astype(str).str.strip().ne("") &
+                chunk["Company"].notna() & chunk["Company"].astype(str).str.strip().ne("") &
+                chunk["Corporate Phone"].astype(str).str.strip().ne("")
+            ]
 
             if chunk.empty:
-                continue  
+                continue 
 
             user_chunk = pd.DataFrame({
-                "name": chunk["First Name"] + " " + chunk["Last Name"],
+                "name": chunk["First Name"].astype(str).str.strip() + " " + chunk["Last Name"].fillna("").astype(str).str.strip(),
                 "email": chunk["Email"],
                 "external_id": range(1234567, 1234567 + len(chunk)),
                 "details": chunk["Keywords"],
@@ -70,7 +54,7 @@ def process_file(file):
                     }
 
         if not user_data:
-            return None, None, "No valid rows found with phone numbers."
+            return None, None, "No valid rows found. All rows were missing First Name, Company, or Corporate Phone."
 
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
@@ -79,21 +63,3 @@ def process_file(file):
 
     except Exception as e:
         return None, None, f"Error while processing file: {str(e)}"
-
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
-
-if uploaded_file:
-    st.info("Processing file...")
-
-    user_df, org_df, error = process_file(uploaded_file)
-
-    if error:
-        st.error(error)
-    else:
-        st.success("Files processed successfully!")
-
-        user_csv = user_df.to_csv(index=False).encode('utf-8')
-        org_csv = org_df.to_csv(index=False).encode('utf-8')
-
-        st.download_button("Download User CSV", user_csv, "user.csv", "text/csv")
-        st.download_button("Download Organization CSV", org_csv, "organization.csv", "text/csv")
