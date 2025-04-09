@@ -1,5 +1,10 @@
 import pandas as pd
 import streamlit as st
+import phonenumbers
+from phonenumbers.phonenumberutil import region_code_for_number
+import pytz
+from timezonefinder import TimezoneFinder
+from geopy.geocoders import Nominatim
 
 st.title("Apollo to Zendesk Data Processor")
 
@@ -7,6 +12,9 @@ REQUIRED_COLUMNS = [
     "First Name", "Last Name", "Email", "Keywords",
     "Industry", "Corporate Phone", "Title", "Company"
 ]
+
+geolocator = Nominatim(user_agent="timezone_locator")
+tf = TimezoneFinder()
 
 def clean_phone(phone):
     if pd.isna(phone):
@@ -16,6 +24,35 @@ def clean_phone(phone):
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     return missing
+
+def get_timezone_tag(phone):
+    try:
+        parsed = phonenumbers.parse(phone, None)
+        region_code = region_code_for_number(parsed)
+        location = geolocator.geocode(region_code)
+        if not location:
+            return "global"
+
+        tz_str = tf.timezone_at(lng=location.longitude, lat=location.latitude)
+        if not tz_str:
+            return "global"
+
+        tz = pytz.timezone(tz_str)
+        utc_offset = tz.utcoffset(pd.Timestamp.now())
+
+        if not utc_offset:
+            return "global"
+
+        hours = utc_offset.total_seconds() / 3600
+
+        if -8 <= hours <= -3:
+            return "region_usa"
+        elif 0 <= hours <= 2:
+            return "region_uk"
+        else:
+            return "global"
+    except Exception:
+        return "global"
 
 def process_file(file):
     try:
@@ -39,6 +76,8 @@ def process_file(file):
             if valid_rows.empty:
                 continue
 
+            valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_timezone_tag)
+
             user_chunk = pd.DataFrame({
                 "name": valid_rows["First Name"].astype(str).str.strip() + " " + valid_rows["Last Name"].fillna("").astype(str).str.strip(),
                 "email": valid_rows["Email"],
@@ -49,7 +88,7 @@ def process_file(file):
                 "role": valid_rows["Title"],
                 "restriction": "",
                 "organization": valid_rows["Company"],
-                "tags": "",
+                "tags": valid_rows["tags"],
                 "brand": "",
                 "custom_fields.<fieldkey>": ""
             })
