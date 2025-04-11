@@ -95,20 +95,24 @@ def process_file(file):
             user_data.append(user_chunk)
 
             for company in valid_rows["Company"].unique():
-                org_chunk = valid_rows[valid_rows["Company"] == company]
-                if company not in organization_data and not org_chunk.empty:
-                    organization_data[company] = {
-                        "name": company,
-                        "external_id": len(organization_data) + 1234456,
-                        "notes": org_chunk["Industry"].iloc[0] if not org_chunk["Industry"].isna().all() else "",
-                        "details": "",
-                        "default": "",
-                        "shared": "",
-                        "shared_comments": "",
-                        "group": "",
-                        "tags": "",
-                        "custom_fields.<fieldkey>": ""
-                    }
+                if company not in organization_data:
+                    org_chunk = valid_rows[valid_rows["Company"] == company]
+                    if not org_chunk.empty:
+                        # Use the first valid phone number for timezone tagging
+                        phone = org_chunk["Corporate Phone"].iloc[0]
+                        tag = get_timezone_tag(phone)
+                        organization_data[company] = {
+                            "name": company,
+                            "external_id": len(organization_data) + 1234456,
+                            "notes": org_chunk["Industry"].iloc[0] if not org_chunk["Industry"].isna().all() else "",
+                            "details": "",
+                            "default": "",
+                            "shared": "",
+                            "shared_comments": "",
+                            "group": "",
+                            "tags": tag,
+                            "custom_fields.<fieldkey>": ""
+                        }
 
         if not user_data:
             return None, None, "No valid rows found. All rows were missing First Name, Company, or Phone."
