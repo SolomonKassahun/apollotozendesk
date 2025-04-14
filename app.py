@@ -21,6 +21,12 @@ def clean_phone(phone):
         return ""
     return str(phone).replace("'", "").strip()
 
+def format_phone_with_plus(phone):
+    phone = phone.strip()
+    if phone and not phone.startswith("+"):
+        return "+" + phone
+    return phone
+
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     return missing
@@ -84,7 +90,7 @@ def process_file(file):
                 "external_id": range(1234567, 1234567 + len(valid_rows)),
                 "details": valid_rows["Keywords"],
                 "notes": valid_rows["Title"],
-                "phone": valid_rows["Corporate Phone"],
+                "phone": valid_rows["Corporate Phone"].apply(format_phone_with_plus),
                 "role": valid_rows["Title"],
                 "restriction": "",
                 "organization": valid_rows["Company"],
@@ -98,8 +104,7 @@ def process_file(file):
                 if company not in organization_data:
                     org_chunk = valid_rows[valid_rows["Company"] == company]
                     if not org_chunk.empty:
-                        # Use the first valid phone number for timezone tagging
-                        phone = org_chunk["Corporate Phone"].iloc[0]
+                        phone = format_phone_with_plus(org_chunk["Corporate Phone"].iloc[0])
                         tag = get_timezone_tag(phone)
                         organization_data[company] = {
                             "name": company,
