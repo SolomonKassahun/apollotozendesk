@@ -83,7 +83,7 @@ def process_file(file):
                 "email": valid_rows["Email"],
                 "external_id": range(1234567, 1234567 + len(valid_rows)),
                 "details": valid_rows["Keywords"],
-                "notes": valid_rows["Industry"],
+                "notes": valid_rows["Title"],
                 "phone": valid_rows["Corporate Phone"],
                 "role": valid_rows["Title"],
                 "restriction": "",
