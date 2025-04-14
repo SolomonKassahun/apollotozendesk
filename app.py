@@ -19,13 +19,21 @@ tf = TimezoneFinder()
 def clean_phone(phone):
     if pd.isna(phone):
         return ""
-    return str(phone).replace("'", "").strip()
+    phone_str = str(phone).strip().replace("'", "")
 
-def format_phone_with_plus(phone):
-    phone = phone.strip()
-    if phone and not phone.startswith("+"):
-        return "+" + phone
-    return phone
+    try:
+        parsed = phonenumbers.parse(phone_str, None)
+        if phonenumbers.is_valid_number(parsed):
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+    except:
+        pass
+
+    # Add + based on known prefixes
+    if phone_str.startswith("44") or phone_str.startswith("1"):
+        return f"+{phone_str}"
+    elif not phone_str.startswith("+"):
+        return f"+{phone_str}"
+    return phone_str
 
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -90,7 +98,7 @@ def process_file(file):
                 "external_id": range(1234567, 1234567 + len(valid_rows)),
                 "details": valid_rows["Keywords"],
                 "notes": valid_rows["Title"],
-                "phone": valid_rows["Corporate Phone"].apply(format_phone_with_plus),
+                "phone": valid_rows["Corporate Phone"],
                 "role": valid_rows["Title"],
                 "restriction": "",
                 "organization": valid_rows["Company"],
@@ -104,7 +112,7 @@ def process_file(file):
                 if company not in organization_data:
                     org_chunk = valid_rows[valid_rows["Company"] == company]
                     if not org_chunk.empty:
-                        phone = format_phone_with_plus(org_chunk["Corporate Phone"].iloc[0])
+                        phone = org_chunk["Corporate Phone"].iloc[0]
                         tag = get_timezone_tag(phone)
                         organization_data[company] = {
                             "name": company,
@@ -124,6 +132,9 @@ def process_file(file):
 
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
+
+        # Final cleaning: ensure all phone numbers have +
+        user_df["phone"] = user_df["phone"].apply(clean_phone)
 
         return user_df, org_df, None
 
