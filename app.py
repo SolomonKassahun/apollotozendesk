@@ -5,6 +5,7 @@ from phonenumbers.phonenumberutil import region_code_for_number
 import pytz
 from timezonefinder import TimezoneFinder
 from geopy.geocoders import Nominatim
+import hashlib
 
 st.title("Apollo to Zendesk Data Processor")
 
@@ -54,6 +55,12 @@ def get_timezone_tag(phone):
     except Exception:
         return "global"
 
+def generate_external_id(email):
+    """Generate a consistent external_id from email using hash"""
+    if pd.isna(email) or not str(email).strip():
+        return ""
+    return hashlib.md5(email.strip().lower().encode()).hexdigest()
+
 def process_file(file):
     try:
         df = pd.read_csv(file, chunksize=10000)
@@ -70,7 +77,8 @@ def process_file(file):
             valid_rows = chunk[
                 chunk["First Name"].notna() & chunk["First Name"].astype(str).str.strip().ne("") &
                 chunk["Company"].notna() & chunk["Company"].astype(str).str.strip().ne("") &
-                chunk["Corporate Phone"].astype(str).str.strip().ne("")
+                chunk["Corporate Phone"].astype(str).str.strip().ne("") &
+                chunk["Email"].notna() & chunk["Email"].astype(str).str.strip().ne("")
             ]
 
             if valid_rows.empty:
@@ -81,7 +89,7 @@ def process_file(file):
             user_chunk = pd.DataFrame({
                 "name": valid_rows["First Name"].astype(str).str.strip() + " " + valid_rows["Last Name"].fillna("").astype(str).str.strip(),
                 "email": valid_rows["Email"],
-                "external_id": range(1234567, 1234567 + len(valid_rows)),
+                "external_id": valid_rows["Email"].apply(generate_external_id),
                 "details": valid_rows["Keywords"],
                 "notes": valid_rows["Title"],
                 "phone": valid_rows["Corporate Phone"],
@@ -103,7 +111,7 @@ def process_file(file):
                         tag = get_timezone_tag(phone)
                         organization_data[company] = {
                             "name": company,
-                            "external_id": len(organization_data) + 1234456,
+                            "external_id": generate_external_id(company),  # Using hashed company name as org external_id
                             "notes": org_chunk["Industry"].iloc[0] if not org_chunk["Industry"].isna().all() else "",
                             "details": "",
                             "default": "",
@@ -115,7 +123,7 @@ def process_file(file):
                         }
 
         if not user_data:
-            return None, None, "No valid rows found. All rows were missing First Name, Company, or Phone."
+            return None, None, "No valid rows found. All rows were missing First Name, Company, Phone, or Email."
 
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
