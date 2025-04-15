@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 import phonenumbers
 from phonenumbers.phonenumberutil import (
-    region_code_for_number, 
+    region_code_for_number,
     NumberParseException
 )
 import hashlib
@@ -18,28 +18,20 @@ def format_international_phone(phone):
     """Convert phone number to proper international format with + prefix"""
     if pd.isna(phone) or not str(phone).strip():
         return ""
-    
+
     phone = str(phone).strip()
-    
+
     # Remove all non-digit characters
     digits = ''.join(c for c in phone if c.isdigit())
-    
+
     if not digits:
         return ""
-    
-    # Handle UK numbers specifically
-    if digits.startswith('44'):
+
+    # Add + if it's a valid international-looking number
+    if digits.startswith('44') or digits.startswith('1') or len(digits) >= 10:
         return f"+{digits}"
-    
-    # Handle US numbers
-    if digits.startswith('1'):
-        return f"+{digits}"
-    
-    # For other numbers, ensure + prefix if it looks like country code
-    if len(digits) > 9:  # Assuming international numbers are longer
-        return f"+{digits}"
-    
-    return digits  # Return as-is for short/local numbers
+
+    return digits
 
 def clean_phone(phone):
     """Standardize phone number format and ensure proper international prefix"""
@@ -54,22 +46,20 @@ def get_region_tag(phone):
     """Determine region based on phone number"""
     if not phone:
         return "global"
-    
+
     try:
-        # Ensure phone has + prefix for parsing
         parse_phone = phone if phone.startswith('+') else f"+{phone}"
         parsed = phonenumbers.parse(parse_phone, None)
         country_code = region_code_for_number(parsed)
-        
+
         if country_code == 'GB':
             return "region_uk"
         elif country_code == 'US':
             return "region_usa"
         else:
             return "global"
-            
+
     except NumberParseException:
-        # Fallback for numbers that can't be parsed
         if phone.startswith('+44') or phone.startswith('44'):
             return "region_uk"
         elif phone.startswith('+1') or phone.startswith('1'):
@@ -92,15 +82,15 @@ def process_file(file):
 
         # Clean and standardize phone numbers
         df["Corporate Phone"] = df["Corporate Phone"].apply(clean_phone)
-        
+
         # Filter valid rows
         valid_rows = df[
-            df["First Name"].notna() & 
+            df["First Name"].notna() &
             df["First Name"].astype(str).str.strip().ne("") &
-            df["Company"].notna() & 
+            df["Company"].notna() &
             df["Company"].astype(str).str.strip().ne("") &
             df["Corporate Phone"].astype(str).str.strip().ne("") &
-            df["Email"].notna() & 
+            df["Email"].notna() &
             df["Email"].astype(str).str.strip().ne("")
         ].copy()
 
@@ -112,8 +102,8 @@ def process_file(file):
 
         # Create user data
         user_df = pd.DataFrame({
-            "name": valid_rows["First Name"].str.strip() + " " + 
-                   valid_rows["Last Name"].fillna("").str.strip(),
+            "name": valid_rows["First Name"].str.strip() + " " +
+                    valid_rows["Last Name"].fillna("").str.strip(),
             "email": valid_rows["Email"],
             "external_id": valid_rows["Email"].apply(generate_external_id),
             "details": valid_rows["Keywords"],
@@ -151,6 +141,7 @@ def process_file(file):
     except Exception as e:
         return None, None, f"Error while processing file: {str(e)}"
 
+# Streamlit UI
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file:
@@ -161,10 +152,10 @@ if uploaded_file:
         st.error(error)
     else:
         st.success("Files processed successfully!")
-        
-        # Show sample of processed phone numbers (without prefixing with `'`)
+
+        # Show sample of processed phone numbers
         st.write("Processed Phone Numbers Sample:")
-        sample_df = user_df[["name", "phone", "tags"]].head(10)
+        sample_df = user_df[["name", "phone", "tags"]].head(10).copy()
         st.write(sample_df)
 
         user_csv = user_df.to_csv(index=False).encode('utf-8')
