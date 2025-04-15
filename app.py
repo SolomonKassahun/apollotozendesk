@@ -14,23 +14,37 @@ REQUIRED_COLUMNS = [
     "Industry", "Corporate Phone", "Title", "Company"
 ]
 
-def clean_phone(phone):
-    """Standardize phone number format"""
+def format_international_phone(phone):
+    """Convert phone number to proper international format with + prefix"""
     if pd.isna(phone) or not str(phone).strip():
         return ""
     
     phone = str(phone).strip()
     
-    # Remove all non-digit characters except leading +
-    cleaned = []
-    for i, c in enumerate(phone):
-        if c == '+' and i == 0:
-            cleaned.append(c)
-        elif c.isdigit():
-            cleaned.append(c)
-    cleaned = ''.join(cleaned)
+    # Remove all non-digit characters
+    digits = ''.join(c for c in phone if c.isdigit())
     
-    return cleaned if cleaned else ""
+    if not digits:
+        return ""
+    
+    # Handle UK numbers specifically
+    if digits.startswith('44'):
+        return f"+{digits}" if not digits.startswith('+') else digits
+    
+    # Handle US numbers
+    if digits.startswith('1'):
+        return f"+{digits}" if not digits.startswith('+') else digits
+    
+    # For other numbers, ensure + prefix if it looks like country code
+    if len(digits) > 9:  # Assuming international numbers are longer
+        return f"+{digits}" if not digits.startswith('+') else digits
+    
+    return digits  # Return as-is for short/local numbers
+
+def clean_phone(phone):
+    """Standardize phone number format and ensure proper international prefix"""
+    formatted = format_international_phone(phone)
+    return formatted if formatted else ""
 
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
@@ -42,7 +56,9 @@ def get_region_tag(phone):
         return "global"
     
     try:
-        parsed = phonenumbers.parse(phone, None)
+        # Ensure phone has + prefix for parsing
+        parse_phone = phone if phone.startswith('+') else f"+{phone}"
+        parsed = phonenumbers.parse(parse_phone, None)
         country_code = region_code_for_number(parsed)
         
         if country_code == 'GB':
@@ -102,9 +118,7 @@ def process_file(file):
             "external_id": valid_rows["Email"].apply(generate_external_id),
             "details": valid_rows["Keywords"],
             "notes": valid_rows["Title"],
-            "phone": valid_rows["Corporate Phone"].apply(
-                lambda x: f"+{x}" if x and not x.startswith('+') else x
-            ),
+            "phone": valid_rows["Corporate Phone"],
             "role": valid_rows["Title"],
             "restriction": "",
             "organization": valid_rows["Company"],
@@ -148,9 +162,11 @@ if uploaded_file:
     else:
         st.success("Files processed successfully!")
         
-        # Show sample of phone numbers and their tags
-        st.write("Sample Phone Number Tags:")
-        st.write(user_df[["phone", "tags"]].head(10))
+        # Show sample of processed phone numbers
+        st.write("Processed Phone Numbers Sample:")
+        sample_df = user_df[["name", "phone", "tags"]].head(10).copy()
+        sample_df["phone"] = sample_df["phone"].apply(lambda x: f"'{x}" if x and x.startswith('+') else x)
+        st.write(sample_df)
 
         user_csv = user_df.to_csv(index=False).encode('utf-8')
         org_csv = org_df.to_csv(index=False).encode('utf-8')
