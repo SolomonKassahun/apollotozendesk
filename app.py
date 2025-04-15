@@ -1,10 +1,10 @@
 import pandas as pd
 import streamlit as st
 import phonenumbers
-from phonenumbers.phonenumberutil import region_code_for_number
-import pytz
-from timezonefinder import TimezoneFinder
-from geopy.geocoders import Nominatim
+from phonenumbers.phonenumberutil import (
+    region_code_for_number, 
+    NumberParseException
+)
 import hashlib
 
 st.title("Apollo to Zendesk Data Processor")
@@ -14,135 +14,124 @@ REQUIRED_COLUMNS = [
     "Industry", "Corporate Phone", "Title", "Company"
 ]
 
-geolocator = Nominatim(user_agent="timezone_locator")
-tf = TimezoneFinder()
-
 def clean_phone(phone):
-    if pd.isna(phone):
+    """Standardize phone number format"""
+    if pd.isna(phone) or not str(phone).strip():
         return ""
-    return str(phone).replace("'", "").strip()
+    
+    phone = str(phone).strip()
+    
+    # Remove all non-digit characters except leading +
+    cleaned = []
+    for i, c in enumerate(phone):
+        if c == '+' and i == 0:
+            cleaned.append(c)
+        elif c.isdigit():
+            cleaned.append(c)
+    cleaned = ''.join(cleaned)
+    
+    return cleaned if cleaned else ""
 
 def validate_columns(df):
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     return missing
 
-def get_timezone_tag(phone):
+def get_region_tag(phone):
+    """Determine region based on phone number"""
+    if not phone:
+        return "global"
+    
     try:
-        # First try direct country code detection
         parsed = phonenumbers.parse(phone, None)
         country_code = region_code_for_number(parsed)
         
-        # Direct country code check (more reliable)
         if country_code == 'GB':
             return "region_uk"
         elif country_code == 'US':
             return "region_usa"
-        
-        # Fallback to timezone detection for other countries
-        location = geolocator.geocode(country_code)
-        if not location:
-            return "global"
-
-        tz_str = tf.timezone_at(lng=location.longitude, lat=location.latitude)
-        if not tz_str:
-            return "global"
-
-        tz = pytz.timezone(tz_str)
-        utc_offset = tz.utcoffset(pd.Timestamp.now())
-
-        if not utc_offset:
-            return "global"
-
-        hours = utc_offset.total_seconds() / 3600
-
-        if -8 <= hours <= -3:  # USA timezones
-            return "region_usa"
-        elif 0 <= hours <= 2:  # UK timezone (UTC+0 to UTC+1 with BST)
-            return "region_uk"
         else:
             return "global"
             
-    except Exception as e:
-        print(f"Error processing phone {phone}: {str(e)}")
-        return "global"
+    except NumberParseException:
+        # Fallback for numbers that can't be parsed
+        if phone.startswith('+44') or phone.startswith('44'):
+            return "region_uk"
+        elif phone.startswith('+1') or phone.startswith('1'):
+            return "region_usa"
+        else:
+            return "global"
 
 def generate_external_id(email):
-    """Generate a consistent external_id from email using hash"""
+    """Generate consistent external_id from email"""
     if pd.isna(email) or not str(email).strip():
         return ""
     return hashlib.md5(email.strip().lower().encode()).hexdigest()
 
 def process_file(file):
     try:
-        df = pd.read_csv(file, chunksize=10000)
-        user_data = []
-        organization_data = {}
+        df = pd.read_csv(file, dtype={'Corporate Phone': str})
+        missing_columns = validate_columns(df)
+        if missing_columns:
+            return None, None, f"Missing columns: {', '.join(missing_columns)}"
 
-        for chunk in df:
-            missing_columns = validate_columns(chunk)
-            if missing_columns:
-                return None, None, f"Missing columns: {', '.join(missing_columns)}"
-
-            chunk["Corporate Phone"] = chunk["Corporate Phone"].apply(clean_phone)
-
-            valid_rows = chunk[
-                chunk["First Name"].notna() & chunk["First Name"].astype(str).str.strip().ne("") &
-                chunk["Company"].notna() & chunk["Company"].astype(str).str.strip().ne("") &
-                chunk["Corporate Phone"].astype(str).str.strip().ne("") &
-                chunk["Email"].notna() & chunk["Email"].astype(str).str.strip().ne("")
-            ]
-
-            if valid_rows.empty:
-                continue
-
-            valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_timezone_tag)
-
-            user_chunk = pd.DataFrame({
-                "name": valid_rows["First Name"].astype(str).str.strip() + " " + valid_rows["Last Name"].fillna("").astype(str).str.strip(),
-                "email": valid_rows["Email"],
-                "external_id": valid_rows["Email"].apply(generate_external_id),
-                "details": valid_rows["Keywords"],
-                "notes": valid_rows["Title"],
-                "phone": valid_rows["Corporate Phone"],
-                "role": valid_rows["Title"],
-                "restriction": "",
-                "organization": valid_rows["Company"],
-                "tags": valid_rows["tags"],
-                "brand": "",
-                "custom_fields.<fieldkey>": ""
-            })
-            user_data.append(user_chunk)
-
-            for company in valid_rows["Company"].unique():
-                if company not in organization_data:
-                    org_chunk = valid_rows[valid_rows["Company"] == company]
-                    if not org_chunk.empty:
-                        # Use the first valid phone number for timezone tagging
-                        phone = org_chunk["Corporate Phone"].iloc[0]
-                        tag = get_timezone_tag(phone)
-                        organization_data[company] = {
-                            "name": company,
-                            "external_id": generate_external_id(company),
-                            "notes": org_chunk["Industry"].iloc[0] if not org_chunk["Industry"].isna().all() else "",
-                            "details": "",
-                            "default": "",
-                            "shared": "",
-                            "shared_comments": "",
-                            "group": "",
-                            "tags": tag,
-                            "custom_fields.<fieldkey>": ""
-                        }
-
-        if not user_data:
-            return None, None, "No valid rows found. All rows were missing First Name, Company, Phone, or Email."
-
-        user_df = pd.concat(user_data, ignore_index=True)
-        org_df = pd.DataFrame.from_dict(organization_data, orient="index")
-
-        # Add debug info
-        st.write("Sample Phone Number Tags:")
-        st.write(user_df[["phone", "tags"]].head(10))
+        # Clean and standardize phone numbers
+        df["Corporate Phone"] = df["Corporate Phone"].apply(clean_phone)
         
+        # Filter valid rows
+        valid_rows = df[
+            df["First Name"].notna() & 
+            df["First Name"].astype(str).str.strip().ne("") &
+            df["Company"].notna() & 
+            df["Company"].astype(str).str.strip().ne("") &
+            df["Corporate Phone"].astype(str).str.strip().ne("") &
+            df["Email"].notna() & 
+            df["Email"].astype(str).str.strip().ne("")
+        ].copy()
+
+        if valid_rows.empty:
+            return None, None, "No valid rows found."
+
+        # Add region tags
+        valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_region_tag)
+
+        # Create user data
+        user_df = pd.DataFrame({
+            "name": valid_rows["First Name"].str.strip() + " " + 
+                   valid_rows["Last Name"].fillna("").str.strip(),
+            "email": valid_rows["Email"],
+            "external_id": valid_rows["Email"].apply(generate_external_id),
+            "details": valid_rows["Keywords"],
+            "notes": valid_rows["Title"],
+            "phone": valid_rows["Corporate Phone"].apply(
+                lambda x: f"+{x}" if x and not x.startswith('+') else x
+            ),
+            "role": valid_rows["Title"],
+            "restriction": "",
+            "organization": valid_rows["Company"],
+            "tags": valid_rows["tags"],
+            "brand": "",
+            "custom_fields.<fieldkey>": ""
+        })
+
+        # Create organization data
+        org_df = valid_rows.groupby("Company").agg({
+            "Industry": "first",
+            "Corporate Phone": "first",
+            "tags": "first"
+        }).reset_index()
+        org_df = pd.DataFrame({
+            "name": org_df["Company"],
+            "external_id": org_df["Company"].apply(generate_external_id),
+            "notes": org_df["Industry"],
+            "details": "",
+            "default": "",
+            "shared": "",
+            "shared_comments": "",
+            "group": "",
+            "tags": org_df["tags"],
+            "custom_fields.<fieldkey>": ""
+        })
+
         return user_df, org_df, None
 
     except Exception as e:
@@ -158,6 +147,10 @@ if uploaded_file:
         st.error(error)
     else:
         st.success("Files processed successfully!")
+        
+        # Show sample of phone numbers and their tags
+        st.write("Sample Phone Number Tags:")
+        st.write(user_df[["phone", "tags"]].head(10))
 
         user_csv = user_df.to_csv(index=False).encode('utf-8')
         org_csv = org_df.to_csv(index=False).encode('utf-8')
