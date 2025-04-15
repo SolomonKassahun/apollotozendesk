@@ -29,15 +29,15 @@ def format_international_phone(phone):
     
     # Handle UK numbers specifically
     if digits.startswith('44'):
-        return f"+{digits}" if not digits.startswith('+') else digits
+        return f"+{digits}"
     
     # Handle US numbers
     if digits.startswith('1'):
-        return f"+{digits}" if not digits.startswith('+') else digits
+        return f"+{digits}"
     
     # For other numbers, ensure + prefix if it looks like country code
     if len(digits) > 9:  # Assuming international numbers are longer
-        return f"+{digits}" if not digits.startswith('+') else digits
+        return f"+{digits}"
     
     return digits  # Return as-is for short/local numbers
 
@@ -162,10 +162,9 @@ if uploaded_file:
     else:
         st.success("Files processed successfully!")
         
-        # Show sample of processed phone numbers
+        # Show sample of processed phone numbers (without prefixing with `'`)
         st.write("Processed Phone Numbers Sample:")
-        sample_df = user_df[["name", "phone", "tags"]].head(10).copy()
-        sample_df["phone"] = sample_df["phone"].apply(lambda x: f"'{x}" if x and x.startswith('+') else x)
+        sample_df = user_df[["name", "phone", "tags"]].head(10)
         st.write(sample_df)
 
         user_csv = user_df.to_csv(index=False).encode('utf-8')
