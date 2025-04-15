@@ -28,9 +28,18 @@ def validate_columns(df):
 
 def get_timezone_tag(phone):
     try:
+        # First try direct country code detection
         parsed = phonenumbers.parse(phone, None)
-        region_code = region_code_for_number(parsed)
-        location = geolocator.geocode(region_code)
+        country_code = region_code_for_number(parsed)
+        
+        # Direct country code check (more reliable)
+        if country_code == 'GB':
+            return "region_uk"
+        elif country_code == 'US':
+            return "region_usa"
+        
+        # Fallback to timezone detection for other countries
+        location = geolocator.geocode(country_code)
         if not location:
             return "global"
 
@@ -46,13 +55,15 @@ def get_timezone_tag(phone):
 
         hours = utc_offset.total_seconds() / 3600
 
-        if -8 <= hours <= -3:
+        if -8 <= hours <= -3:  # USA timezones
             return "region_usa"
-        elif 0 <= hours <= 2:
+        elif 0 <= hours <= 2:  # UK timezone (UTC+0 to UTC+1 with BST)
             return "region_uk"
         else:
             return "global"
-    except Exception:
+            
+    except Exception as e:
+        print(f"Error processing phone {phone}: {str(e)}")
         return "global"
 
 def generate_external_id(email):
@@ -111,7 +122,7 @@ def process_file(file):
                         tag = get_timezone_tag(phone)
                         organization_data[company] = {
                             "name": company,
-                            "external_id": generate_external_id(company),  # Using hashed company name as org external_id
+                            "external_id": generate_external_id(company),
                             "notes": org_chunk["Industry"].iloc[0] if not org_chunk["Industry"].isna().all() else "",
                             "details": "",
                             "default": "",
@@ -128,6 +139,10 @@ def process_file(file):
         user_df = pd.concat(user_data, ignore_index=True)
         org_df = pd.DataFrame.from_dict(organization_data, orient="index")
 
+        # Add debug info
+        st.write("Sample Phone Number Tags:")
+        st.write(user_df[["phone", "tags"]].head(10))
+        
         return user_df, org_df, None
 
     except Exception as e:
