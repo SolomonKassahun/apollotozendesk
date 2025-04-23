@@ -100,10 +100,10 @@ def process_file(file):
             "custom_fields.<fieldkey>": ""
         })
 
-        # Create unique organization for each user
+        # Create one organization per user (unique org per user)
         org_df = pd.DataFrame({
             "name": valid_rows["Company"],
-            "external_id": (valid_rows["Company"] + valid_rows["Email"]).apply(generate_external_id),
+            "external_id": valid_rows["Email"].apply(lambda x: generate_external_id(str(x) + "_unique_org")),
             "notes": valid_rows["Industry"],
             "details": "",
             "default": "",
@@ -130,6 +130,8 @@ if uploaded_file:
         st.error(error)
     else:
         st.success("Files processed successfully!")
+
+        st.write(f"✅ Users: {len(user_df)} | Organizations: {len(org_df)}")
 
         st.write("Processed Phone Numbers Sample:")
         sample_df = user_df[["name", "phone", "tags"]].head(10).copy()
