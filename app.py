@@ -15,26 +15,17 @@ REQUIRED_COLUMNS = [
 ]
 
 def format_international_phone(phone):
-    """Convert phone number to proper international format with + prefix"""
     if pd.isna(phone) or not str(phone).strip():
         return ""
-
     phone = str(phone).strip()
-
-    # Remove all non-digit characters
     digits = ''.join(c for c in phone if c.isdigit())
-
     if not digits:
         return ""
-
-    # Add + if it's a valid international-looking number
     if digits.startswith('44') or digits.startswith('1') or len(digits) >= 10:
         return f"+{digits}"
-
     return digits
 
 def clean_phone(phone):
-    """Standardize phone number format and ensure proper international prefix"""
     formatted = format_international_phone(phone)
     return formatted if formatted else ""
 
@@ -43,22 +34,18 @@ def validate_columns(df):
     return missing
 
 def get_region_tag(phone):
-    """Determine region based on phone number"""
     if not phone:
         return "global"
-
     try:
         parse_phone = phone if phone.startswith('+') else f"+{phone}"
         parsed = phonenumbers.parse(parse_phone, None)
         country_code = region_code_for_number(parsed)
-
         if country_code == 'GB':
             return "region_uk"
         elif country_code == 'US':
             return "region_usa"
         else:
             return "global"
-
     except NumberParseException:
         if phone.startswith('+44') or phone.startswith('44'):
             return "region_uk"
@@ -67,11 +54,10 @@ def get_region_tag(phone):
         else:
             return "global"
 
-def generate_external_id(email):
-    """Generate consistent external_id from email"""
-    if pd.isna(email) or not str(email).strip():
+def generate_external_id(value):
+    if pd.isna(value) or not str(value).strip():
         return ""
-    return hashlib.md5(email.strip().lower().encode()).hexdigest()
+    return hashlib.md5(value.strip().lower().encode()).hexdigest()
 
 def process_file(file):
     try:
@@ -80,10 +66,8 @@ def process_file(file):
         if missing_columns:
             return None, None, f"Missing columns: {', '.join(missing_columns)}"
 
-        # Clean and standardize phone numbers
         df["Corporate Phone"] = df["Corporate Phone"].apply(clean_phone)
 
-        # Filter valid rows
         valid_rows = df[
             df["First Name"].notna() &
             df["First Name"].astype(str).str.strip().ne("") &
@@ -97,7 +81,6 @@ def process_file(file):
         if valid_rows.empty:
             return None, None, "No valid rows found."
 
-        # Add region tags
         valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_region_tag)
 
         # Create user data
@@ -117,22 +100,17 @@ def process_file(file):
             "custom_fields.<fieldkey>": ""
         })
 
-        # Create organization data
-        org_df = valid_rows.groupby("Company").agg({
-            "Industry": "first",
-            "Corporate Phone": "first",
-            "tags": "first"
-        }).reset_index()
+        # Create unique organization for each user
         org_df = pd.DataFrame({
-            "name": org_df["Company"],
-            "external_id": org_df["Company"].apply(generate_external_id),
-            "notes": org_df["Industry"],
+            "name": valid_rows["Company"],
+            "external_id": (valid_rows["Company"] + valid_rows["Email"]).apply(generate_external_id),
+            "notes": valid_rows["Industry"],
             "details": "",
             "default": "",
             "shared": "",
             "shared_comments": "",
             "group": "",
-            "tags": org_df["tags"],
+            "tags": valid_rows["tags"],
             "custom_fields.<fieldkey>": ""
         })
 
@@ -153,7 +131,6 @@ if uploaded_file:
     else:
         st.success("Files processed successfully!")
 
-        # Show sample of processed phone numbers
         st.write("Processed Phone Numbers Sample:")
         sample_df = user_df[["name", "phone", "tags"]].head(10).copy()
         st.write(sample_df)
