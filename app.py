@@ -88,7 +88,7 @@ def process_file(file):
             "name": valid_rows["First Name"].str.strip() + " " +
                     valid_rows["Last Name"].fillna("").str.strip(),
             "email": valid_rows["Email"],
-            "external_id": valid_rows["Email"].apply(generate_external_id),
+            "external_id": valid_rows["Corporate Phone"].apply(generate_external_id),
             "details": valid_rows["Keywords"],
             "notes": valid_rows["Title"],
             "phone": valid_rows["Corporate Phone"],
@@ -103,7 +103,7 @@ def process_file(file):
         # Create one organization per user (unique org per user)
         org_df = pd.DataFrame({
             "name": valid_rows["Company"],
-            "external_id": valid_rows["Email"].apply(lambda x: generate_external_id(str(x) + "_unique_org")),
+            "external_id": valid_rows["Corporate Phone"].apply(lambda x: generate_external_id(str(x) + "_unique_org")),
             "notes": valid_rows["Industry"],
             "details": "",
             "default": "",
