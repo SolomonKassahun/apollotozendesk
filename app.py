@@ -41,14 +41,14 @@ def get_region_tag(phone):
         parsed = phonenumbers.parse(parse_phone, None)
         country_code = region_code_for_number(parsed)
         if country_code == 'GB':
-            return "region_uk"
+            return "region_uk_meron"
         elif country_code == 'US':
             return "region_usa"
         else:
             return "global"
     except NumberParseException:
         if phone.startswith('+44') or phone.startswith('44'):
-            return "region_uk"
+            return "region_uk_meron"
         elif phone.startswith('+1') or phone.startswith('1'):
             return "region_usa"
         else:
