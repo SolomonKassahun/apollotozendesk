@@ -83,12 +83,13 @@ def process_file(file):
 
         valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_region_tag)
 
-        # Create user data
+        valid_rows["full_name"] = valid_rows["First Name"].str.strip() + " " + valid_rows["Last Name"].fillna("").str.strip()
+
         user_df = pd.DataFrame({
-            "name": valid_rows["First Name"].str.strip() + " " +
-                    valid_rows["Last Name"].fillna("").str.strip(),
+            "name": valid_rows["full_name"],
             "email": valid_rows["Email"],
-            "external_id": valid_rows["Corporate Phone"].apply(generate_external_id),
+            "external_id": valid_rows.apply(
+                lambda row: generate_external_id(str(row["Corporate Phone"]) + row["full_name"]), axis=1),
             "details": valid_rows["Keywords"],
             "notes": valid_rows["Title"],
             "phone": valid_rows["Corporate Phone"],
@@ -100,10 +101,10 @@ def process_file(file):
             "custom_fields.<fieldkey>": ""
         })
 
-        # Create one organization per user (unique org per user)
         org_df = pd.DataFrame({
             "name": valid_rows["Company"],
-            "external_id": valid_rows["Corporate Phone"].apply(lambda x: generate_external_id(str(x) + "_unique_org")),
+            "external_id": valid_rows.apply(
+                lambda row: generate_external_id(str(row["Corporate Phone"]) + row["full_name"] + "_unique_org"), axis=1),
             "notes": valid_rows["Industry"],
             "details": "",
             "default": "",
@@ -119,7 +120,7 @@ def process_file(file):
     except Exception as e:
         return None, None, f"Error while processing file: {str(e)}"
 
-# Streamlit UI
+
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file:
