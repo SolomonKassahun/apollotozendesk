@@ -11,7 +11,7 @@ st.title("Apollo to Zendesk Data Processor")
 
 REQUIRED_COLUMNS = [
     "First Name", "Last Name", "Email", "Keywords",
-    "Industry", "Corporate Phone", "Title", "Company"
+    "Industry", "Corporate Phone", "Mobile Phone", "Other Phone", "Title", "Company"
 ]
 
 def format_international_phone(phone):
@@ -61,19 +61,30 @@ def generate_external_id(value):
 
 def process_file(file):
     try:
-        df = pd.read_csv(file, dtype={'Corporate Phone': str})
+        df = pd.read_csv(file, dtype={
+            'Corporate Phone': str,
+            'Mobile Phone': str,
+            'Other Phone': str
+        })
+
         missing_columns = validate_columns(df)
         if missing_columns:
             return None, None, f"Missing columns: {', '.join(missing_columns)}"
 
+        df["Mobile Phone"] = df["Mobile Phone"].apply(clean_phone)
+        df["Other Phone"] = df["Other Phone"].apply(clean_phone)
         df["Corporate Phone"] = df["Corporate Phone"].apply(clean_phone)
+
+        df["phone"] = df["Mobile Phone"]
+        df["phone"] = df["phone"].where(df["phone"].astype(bool), df["Other Phone"])
+        df["phone"] = df["phone"].where(df["phone"].astype(bool), df["Corporate Phone"])
 
         valid_rows = df[
             df["First Name"].notna() &
             df["First Name"].astype(str).str.strip().ne("") &
             df["Company"].notna() &
             df["Company"].astype(str).str.strip().ne("") &
-            df["Corporate Phone"].astype(str).str.strip().ne("") &
+            df["phone"].astype(str).str.strip().ne("") &
             df["Email"].notna() &
             df["Email"].astype(str).str.strip().ne("")
         ].copy()
@@ -81,18 +92,17 @@ def process_file(file):
         if valid_rows.empty:
             return None, None, "No valid rows found."
 
-        valid_rows["tags"] = valid_rows["Corporate Phone"].apply(get_region_tag)
-
+        valid_rows["tags"] = valid_rows["phone"].apply(get_region_tag)
         valid_rows["full_name"] = valid_rows["First Name"].str.strip() + " " + valid_rows["Last Name"].fillna("").str.strip()
 
         user_df = pd.DataFrame({
             "name": valid_rows["full_name"],
             "email": valid_rows["Email"],
             "external_id": valid_rows.apply(
-                lambda row: generate_external_id(str(row["Corporate Phone"]) + row["full_name"]), axis=1),
+                lambda row: generate_external_id(str(row["phone"]) + row["full_name"]), axis=1),
             "details": valid_rows["Keywords"],
             "notes": valid_rows["Title"],
-            "phone": valid_rows["Corporate Phone"],
+            "phone": valid_rows["phone"],
             "role": valid_rows["Title"],
             "restriction": "",
             "organization": valid_rows["Company"],
@@ -104,7 +114,7 @@ def process_file(file):
         org_df = pd.DataFrame({
             "name": valid_rows["Company"],
             "external_id": valid_rows.apply(
-                lambda row: generate_external_id(str(row["Corporate Phone"]) + row["full_name"] + "_unique_org"), axis=1),
+                lambda row: generate_external_id(str(row["phone"]) + row["full_name"] + "_unique_org"), axis=1),
             "notes": valid_rows["Industry"],
             "details": "",
             "default": "",
@@ -119,7 +129,6 @@ def process_file(file):
 
     except Exception as e:
         return None, None, f"Error while processing file: {str(e)}"
-
 
 uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
