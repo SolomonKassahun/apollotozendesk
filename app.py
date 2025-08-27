@@ -108,7 +108,7 @@ def process_file(file):
             "organization": valid_rows["Company"],
             "tags": valid_rows["tags"],
             "brand": "",
-            "custom_fields.City": valid_rows["Company City"],
+            "custom_fields.City": valid_rows["City"],
             "custom_fields.Company Linkedin Url": valid_rows["Company Linkedin Url"],
              "custom_fields.Person Linkedin Url": valid_rows["Person Linkedin Url"],
             "custom_fields.Website": valid_rows["Website"],
