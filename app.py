@@ -108,10 +108,11 @@ def process_file(file):
             "organization": valid_rows["Company"],
             "tags": valid_rows["tags"],
             "brand": "",
-            "custom_fields.City": valid_rows["City"],
-            "custom_fields.Company Linkedin Url": valid_rows["Company Linkedin Url"],
-             "custom_fields.Person Linkedin Url": valid_rows["Person Linkedin Url"],
-            "custom_fields.Website": valid_rows["Website"],
+           "custom_fields.city": valid_rows["City"],
+           "custom_fields.company_linkedin_url": valid_rows["Company Linkedin Url"],
+           "custom_fields.person_linkedin_url": valid_rows["Person Linkedin Url"],
+            "custom_fields.website": valid_rows["Website"],
+
             "custom_fields.<fieldkey>": ""
         })
 
