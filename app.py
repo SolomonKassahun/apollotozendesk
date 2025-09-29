@@ -105,7 +105,7 @@ def process_file(file):
             "phone": valid_rows["phone"],
             "role": valid_rows["Title"],
             "restriction": "",
-            "organization": valid_rows["Company"],
+            "organization": valid_rows["Company Name"],
             "tags": valid_rows["tags"],
             "brand": "",
            "custom_fields.city": valid_rows["City"],
