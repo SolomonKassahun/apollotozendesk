@@ -105,7 +105,7 @@ def process_file(file):
             "phone": valid_rows["phone"],
             "role": valid_rows["Title"],
             "restriction": "",
-            "organization": valid_rows["Company Name"],
+            "organization": valid_rows["Company"],
             "tags": valid_rows["tags"],
             "brand": "",
            "custom_fields.city": valid_rows["City"],
@@ -117,7 +117,7 @@ def process_file(file):
         })
 
         org_df = pd.DataFrame({
-            "name": valid_rows["Company Name"],
+            "name": valid_rows["Company"],
             "external_id": valid_rows.apply(
                 lambda row: generate_external_id(str(row["phone"]) + row["full_name"] + "_unique_org"), axis=1),
             "notes": valid_rows["Industry"],
