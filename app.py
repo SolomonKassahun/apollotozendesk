@@ -117,7 +117,7 @@ def process_file(file):
         })
 
         org_df = pd.DataFrame({
-            "name": valid_rows["Company"],
+            "name": valid_rows["Company Name"],
             "external_id": valid_rows.apply(
                 lambda row: generate_external_id(str(row["phone"]) + row["full_name"] + "_unique_org"), axis=1),
             "notes": valid_rows["Industry"],
